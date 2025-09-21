@@ -10,7 +10,7 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
 # --- API Keys & Configuration ---
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -21,53 +21,76 @@ cloudinary.config(
 )
 
 # --- Helper Functions ---
+# --- Helper Functions ---
 def generate_product_description(product_name, keywords):
     """Generates product description, social media post, and hashtags using the Gemini API."""
-    
-    # Create a generative model instance
-    model = genai.GenerativeModel('gemini-pro')
-    
+
+    model = genai.GenerativeModel('gemini-2.5-pro')
+
     prompt = f"""
-    You are an expert copywriter for a local artisan marketplace. Your task is to write a compelling, SEO-optimized product description, a short social media post, and a list of hashtags for a handmade product.
+I will provide you with a product name and keywords. Your response MUST be formatted with '---' as the only delimiter between each section.
 
-    Product Name: {product_name}
-    Keywords/Details: {keywords}
+You are an expert copywriter for a local artisan marketplace. Your task is to write a compelling, SEO-optimized product description, a short social media post, and a list of hashtags for a handmade product.
 
-    ---
-    **Product Description:**
-    Write a detailed and engaging description of the product. Highlight its unique qualities, the materials used, and the story behind it.
-    
-    **Social Media Post:**
-    Write a short, catchy post for Instagram or Facebook that encourages engagement.
-    
-    **Hashtags:**
-    Generate 5-10 relevant and popular hashtags.
-    """
-    
+Product Name: {product_name}
+Keywords/Details: {keywords}
+
+---
+**Product Description:**
+Write a detailed and engaging description of the product. Highlight its unique qualities, the materials used, and the story behind it.
+
+---
+**Social Media Post:**
+Write a short, catchy post for Instagram or Facebook that encourages engagement.
+
+---
+**Hashtags:**
+Generate 5-10 relevant and popular hashtags.
+"""
+
     try:
         response = model.generate_content(prompt)
-        
-        # Check if the response contains a valid text attribute
+
         if not hasattr(response, 'text') or not response.text:
             print("Gemini API returned an empty or invalid response.")
             return None
 
         full_text = response.text.strip()
-        
-        # Parse the text into the three parts
-        parts = full_text.split('---')
-        
-        # Ensure we have the expected number of parts
-        if len(parts) < 3:
-            print("Gemini API response format is incorrect. Could not split into three parts.")
-            return None
 
-        description, social_post, hashtags = parts[0], parts[1], parts[2]
-        
+        # Split the text into parts based on "---"
+        parts = full_text.split('---')
+
+        # Initialize defaults
+        description_text = "Could not generate a full description."
+        social_post_text = "Could not generate a social media post."
+        hashtags_list = []
+
+        # Attempt to parse each section safely
+        if len(parts) > 0:
+            for part in parts:
+                if "**Product Description:**" in part:
+                    description_text = part.replace('**Product Description:**', '').strip()
+                elif "**Social Media Post:**" in part:
+                    social_post_text = part.replace('**Social Media Post:**', '').strip()
+                elif "**Hashtags:**" in part: # Changed from "**Hashtags:**:" to "**Hashtags:**"
+                    hashtags_list = part.replace('**Hashtags:**', '').strip().split() # Removed colon from replace
+
+        if not hashtags_list and "Hashtags:" in full_text:
+            # Fallback if the split didn't catch hashtags (e.g., if it was the only part after last ---)
+            hashtag_line = full_text.split("Hashtags:")[-1].strip()
+            if hashtag_line:
+                hashtags_list = hashtag_line.split()
+
+        if not description_text and "Product Description:" in full_text:
+             description_text = full_text.split("Product Description:")[-1].split("Social Media Post:")[0].strip() if "Social Media Post:" in full_text else full_text.split("Product Description:")[-1].strip()
+
+        if not social_post_text and "Social Media Post:" in full_text:
+            social_post_text = full_text.split("Social Media Post:")[-1].split("Hashtags:")[0].strip() if "Hashtags:" in full_text else full_text.split("Social Media Post:")[-1].strip()
+
         return {
-            "description": description.replace('**Product Description:**', '').strip(),
-            "social_post": social_post.replace('**Social Media Post:**', '').strip(),
-            "hashtags": hashtags.replace('**Hashtags:**:', '').strip().split()
+            "description": description_text,
+            "social_post": social_post_text,
+            "hashtags": hashtags_list
         }
     except Exception as e:
         print(f"Error calling Gemini API: {e}")
