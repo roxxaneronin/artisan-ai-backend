@@ -25,7 +25,7 @@ def generate_product_description(product_name, keywords):
     """Generates product description, social media post, and hashtags using the Gemini API."""
     
     # Create a generative model instance
-    model = genai.GenerativeModel('gemini-2.5-pro')
+    model = genai.GenerativeModel('gemini-pro')
     
     prompt = f"""
     You are an expert copywriter for a local artisan marketplace. Your task is to write a compelling, SEO-optimized product description, a short social media post, and a list of hashtags for a handmade product.
